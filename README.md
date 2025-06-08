@@ -1,6 +1,6 @@
-# 🔒 obscura
+![Logo](images/obscura-wide.png)
 
-## Restrict Access to Web Services Using a Secret Path with Optional Redis Tracking
+## 🔒 Restrict Access to Web Services Using a Secret Path with Optional Redis Tracking
 
 `obscura` is a lightweight, high-performance reverse proxy written in Go that restricts access to a backend service unless the client first accesses a predefined **secret path** (e.g., `/13b84d2a-faff-4b02-bef0-9f7898252659`). Once accessed, the proxy allows the client’s IP to continue accessing the backend for a configurable time. It can be deployed as a sidecar along with your main container or separately also. It uses Redis for multi-instance or clustered deployment support.
 

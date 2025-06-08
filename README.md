@@ -1,8 +1,8 @@
-# 🔒 secret-proxy
+# 🔒 obscura
 
 ## Restrict Access to Web Services Using a Secret Path with Optional Redis Tracking
 
-`secret-proxy` is a lightweight, high-performance reverse proxy written in Go that restricts access to a backend service unless the client first accesses a predefined **secret path** (e.g., `/13b84d2a-faff-4b02-bef0-9f7898252659`). Once accessed, the proxy allows the client’s IP to continue accessing the backend for a configurable time. It can be deployed as a sidecar along with your main container or separately also. It uses Redis for multi-instance or clustered deployment support.
+`obscura` is a lightweight, high-performance reverse proxy written in Go that restricts access to a backend service unless the client first accesses a predefined **secret path** (e.g., `/13b84d2a-faff-4b02-bef0-9f7898252659`). Once accessed, the proxy allows the client’s IP to continue accessing the backend for a configurable time. It can be deployed as a sidecar along with your main container or separately also. It uses Redis for multi-instance or clustered deployment support.
 
 This proxy can be useful for:
 - Adding another layer of protection for self-hosted apps like **Immich** or **NextCloud**
@@ -32,7 +32,7 @@ This proxy can be useful for:
 
 ### Real Client IP Handling
 
-When requests pass through proxies or load balancers, the original client IP is often replaced with the proxy's IP. To address this, `secret-proxy` extracts the real client IP from custom headers added by these intermediaries. This ensures accurate IP-based session tracking.
+When requests pass through proxies or load balancers, the original client IP is often replaced with the proxy's IP. To address this, `obscura` extracts the real client IP from custom headers added by these intermediaries. This ensures accurate IP-based session tracking.
 
 The tool supports the following headers to retrieve the real client IP:
 - `CF-Connecting-IP` (Cloudflare)
@@ -47,7 +47,7 @@ If none of these headers are present, the proxy falls back to using the IP from 
 
 ### Supported Proxies and Load Balancers
 
-`secret-proxy` is compatible with the following proxies and load balancers:
+`obscura` is compatible with the following proxies and load balancers:
 - Cloudflare
 - Akamai
 - Fastly
@@ -88,7 +88,7 @@ services:
         restart: always
         container_name: it-tools
     proxy:
-      image: 'secret-proxy:latest'
+      image: 'obscura:latest'
       ports:
         - "11924:8080"
       environment:
@@ -138,14 +138,14 @@ go version
 
 ```bash
 go mod tidy
-go build -o secret-proxy main.go
-./secret-proxy
+go build -o obscura main.go
+./obscura
 ```
 
 ### 3. Build Docker Image
 
 ```bash
-docker build -t secret-proxy .
+docker build -t obscura .
 ```
 
 ---

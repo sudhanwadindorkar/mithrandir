@@ -30,6 +30,34 @@ This proxy can be useful for:
 3. For the next N minutes, all requests from their IP are allowed
 4. Requests from other IPs are blocked with a `403 Forbidden`
 
+### Real Client IP Handling
+
+When requests pass through proxies or load balancers, the original client IP is often replaced with the proxy's IP. To address this, `secret-proxy` extracts the real client IP from custom headers added by these intermediaries. This ensures accurate IP-based session tracking.
+
+The tool supports the following headers to retrieve the real client IP:
+- `CF-Connecting-IP` (Cloudflare)
+- `True-Client-IP` (Akamai)
+- `X-Real-IP` (Common)
+- `X-Forwarded-For` (Common)
+- `X-Cluster-Client-IP` (Common)
+- `Fastly-Client-IP` (Fastly)
+- `Forwarded` (RFC 7239)
+
+If none of these headers are present, the proxy falls back to using the IP from the `RemoteAddr` field.
+
+### Supported Proxies and Load Balancers
+
+`secret-proxy` is compatible with the following proxies and load balancers:
+- Cloudflare
+- Akamai
+- Fastly
+- NGINX
+- HAProxy
+- AWS Elastic Load Balancer (ELB)
+- Traefik
+
+This ensures seamless integration with a wide range of deployment setups.
+
 ---
 
 ## ⚙️ Configuration

@@ -1,0 +1,9 @@
+# Ignore proxy binary or directory
+proxy
+proxy/
+
+# Ignore Go workspace file
+go.work
+go.work.sum
+*.code-workspace
+/.idea/

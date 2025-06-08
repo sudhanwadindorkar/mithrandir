@@ -120,16 +120,25 @@ func main() {
 }
 
 func clientIP(r *http.Request) string {
-	ip := r.Header.Get("X-Real-IP")
-	if ip == "" {
-		ip = r.Header.Get("X-Forwarded-For")
+	headers := []string{
+		"CF-Connecting-IP",    // Cloudflare
+		"True-Client-IP",      // Akamai
+		"X-Real-IP",           // Common
+		"X-Forwarded-For",     // Common
+		"X-Cluster-Client-IP", // Common
+		"Fastly-Client-IP",    // Fastly
+		"Forwarded",           // RFC 7239
 	}
-	if ip == "" {
-		ip, _, _ = net.SplitHostPort(r.RemoteAddr)
-	} else {
-		ip = strings.Split(ip, ",")[0]
+
+	for _, header := range headers {
+		if ip := r.Header.Get(header); ip != "" {
+			return strings.TrimSpace(strings.Split(ip, ",")[0])
+		}
 	}
-	return strings.TrimSpace(ip)
+
+	// Fallback to RemoteAddr
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	return ip
 }
 
 func getenv(key, fallback string) string {

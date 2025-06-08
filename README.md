@@ -88,7 +88,7 @@ services:
         restart: always
         container_name: it-tools
     proxy:
-      image: 'obscura:latest'
+      image: 'sudhanwadindorkar/obscura:latest'
       ports:
         - "11924:8080"
       environment:

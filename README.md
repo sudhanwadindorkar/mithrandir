@@ -58,20 +58,47 @@ If none of these headers are present, the proxy falls back to using the IP from 
 
 This ensures seamless integration with a wide range of deployment setups.
 
+## 🔒 Security Notes
+
+This is **not** a replacement for authentication, but a lightweight gate:
+
+- Does **not** require login or tokens
+- Tracks IPs, which may be shared (e.g., behind NAT)
+- Make sure URLs aren’t leaked via referrers, logs, etc.
+- Use long, unguessable secret paths like `/a1b2c3d4-e5f6...`
+- Always deploy behind HTTPS
+
+> ⚠️ **Important Security Disclaimer**
+>
+> This proxy relies on *security through obscurity* and should **not** be used as your sole layer of protection. It serves to make applications more difficult to discover, but it does **not** replace proper authentication or authorization mechanisms.
+>
+> Ensure that your production setup includes:
+> - Strong authentication (e.g., SSO, OAuth, identity providers)
+> - TLS/HTTPS encryption
+> - IP-based firewalls and rate limiting
+> - Bot detection and geo-blocking, if applicable
+>
+> This proxy was built to allow selective internet exposure of self-hosted services—particularly to enable mobile access for trusted users (like friends and family) without requiring additional apps like Cloudflare WARP. Previously, access control was handled using Cloudflare’s Identity Provider (IDP) with WARP policies, but that approach required installing WARP on mobile devices. This proxy offers a lightweight alternative for accessing services from Android and iOS apps without extra setup.
+>
+> If your application is only accessed via web browsers, consider using more robust solutions like Cloudflare Access with IDP/WARP instead of relying on this proxy alone.
+>
+> 🔍 **Note:** Users behind NAT (e.g., multiple devices sharing the same public IP) will be indistinguishable using IP-based tracking. For more granular control, consider enabling cookie- or token-based session tracking.
+
 ---
 
 ## ⚙️ Configuration
 
 ### Environment Variables
 
-| Variable       | Description                                | Default                |
-|----------------|--------------------------------------------|------------------------|
-| `PORT`         | Port the proxy listens on                  | `8080`                 |
-| `BACKEND_URL`  | URL of the backend service                 | None |
-| `SECRET_PATH`  | Secret path clients must visit to unlock access | `/secret_path`     |
-| `REDIS_ADDR`   | Redis address                              | `redis:6379`       |
-| `REDIS_PASSWORD`   | Redis password                         | ``       |
-| `AUTO_RENEW`   | Extend the session on every successful access| true       |
+| Variable         | Description                                                                          | Default        |
+|------------------|--------------------------------------------------------------------------------------|----------------|
+| `LISTEN_ADDRESS` | IP:Port the proxy listens on. By default the proxy listens on all network interfaces | `:8080`        |
+| `UPSTREAM_URL`   | URL of the upstream service                                                          | None           |
+| `SECRET_PATH`    | Secret path prefix clients must visit to unlock access                               | `/secret_path` |
+| `REDIS_ADDRESS`  | Redis address                                                                        | `redis:6379`   |
+| `REDIS_PASSWORD` | Redis password                                                                       | ``             |
+| `AUTO_RENEW`     | Extend the session on every successful access                                        | true           |
+| `SESSION_TTL`    | The time after which an inactive client session will be invalidated.                 | `10m`          |
 
 ---
 
@@ -92,10 +119,10 @@ services:
       ports:
         - "11924:8080"
       environment:
-        - BACKEND_URL=http://it-tools
+        - UPSTREAM_URL=http://it-tools
         - SECRET_PATH=/13b84d2a-faff-4b02-bef0-9f7898252659
         - SESSION_TTL=24h
-        - REDIS_ADDR=redis:6379
+        - REDIS_ADDRESS=redis:6379
         - AUTO_RENEW=true
       depends_on:
         - it-tools
@@ -159,38 +186,12 @@ The proxy logs:
 
 ---
 
-## 🔒 Security Notes
-
-This is **not** a replacement for authentication, but a lightweight gate:
-
-- Does **not** require login or tokens
-- Tracks IPs, which may be shared (e.g., behind NAT)
-- Make sure URLs aren’t leaked via referrers, logs, etc.
-- Use long, unguessable secret paths like `/a1b2c3d4-e5f6...`
-- Always deploy behind HTTPS
-
-> ⚠️ **Important Security Disclaimer**
->
-> This proxy relies on *security through obscurity* and should **not** be used as your sole layer of protection. It serves to make applications more difficult to discover, but it does **not** replace proper authentication or authorization mechanisms.
->
-> Ensure that your production setup includes:
-> - Strong authentication (e.g., SSO, OAuth, identity providers)
-> - TLS/HTTPS encryption
-> - IP-based firewalls and rate limiting
-> - Bot detection and geo-blocking, if applicable
->
-> This proxy was built to allow selective internet exposure of self-hosted services—particularly to enable mobile access for trusted users (like friends and family) without requiring additional apps like Cloudflare WARP. Previously, access control was handled using Cloudflare’s Identity Provider (IDP) with WARP policies, but that approach required installing WARP on mobile devices. This proxy offers a lightweight alternative for accessing services from Android and iOS apps without extra setup.
->
-> If your application is only accessed via web browsers, consider using more robust solutions like Cloudflare Access with IDP/WARP instead of relying on this proxy alone.
->
-> 🔍 **Note:** Users behind NAT (e.g., multiple devices sharing the same public IP) will be indistinguishable using IP-based tracking. For more granular control, consider enabling cookie- or token-based session tracking.
-
----
-
 ## 🧩 Future Enhancements
 
-- Per-user sessions with User-Agent or device tracking (for NAT use-cases)
 - Prometheus metrics endpoint
+- Multi-app support and UI
+- Notifications
+- Device tracking (for NAT use-cases)
 
 ---
 

@@ -2,7 +2,11 @@
 
 ## 🧙You shall not pass!
 
-`mithrandir` is a lightweight, high-performance reverse proxy written in Go that restricts access to a backend service unless the client first accesses a predefined **secret path** (e.g., `/13b84d2a-faff-4b02-bef0-9f7898252659`). Once accessed, the proxy allows the client’s IP to continue accessing the backend for a configurable time. It can be deployed as a sidecar along with your main container or separately also. It uses Redis for multi-instance or clustered deployment support.
+`mithrandir` is a lightweight, high-performance reverse proxy written in Go that restricts access to a backend service 
+unless the client first accesses a predefined **secret path** (e.g., `/13b84d2a-faff-4b02-bef0-9f7898252659`). 
+Once accessed, the proxy allows the client’s IP to continue accessing the backend for a configurable time. 
+It can be deployed as a sidecar along with your main container or separately. 
+It uses Redis for multi-instance or clustered deployment support.
 
 This proxy can be useful for:
 - Adding another layer of protection for self-hosted apps like **Immich** or **NextCloud**
@@ -26,7 +30,7 @@ This proxy can be useful for:
 ## 🧪 How It Works
 
 1. User accesses: `https://yourdomain.com/secret_path`
-2. Their IP is recorded as "allowed" (stored in memory or Redis)
+2. Their IP is recorded as "allowed" (stored in Redis)
 3. For the next N minutes, all requests from their IP are allowed
 4. Requests from other IPs are blocked with a `403 Forbidden`
 
@@ -90,15 +94,16 @@ This is **not** a replacement for authentication, but a lightweight gate:
 
 ### Environment Variables
 
-| Variable         | Description                                                                          | Default        |
-|------------------|--------------------------------------------------------------------------------------|----------------|
-| `LISTEN_ADDRESS` | IP:Port the proxy listens on. By default the proxy listens on all network interfaces | `:8080`        |
-| `UPSTREAM_URL`   | URL of the upstream service                                                          | None           |
-| `SECRET_PATH`    | Secret path prefix clients must visit to unlock access                               | `/secret_path` |
-| `REDIS_ADDRESS`  | Redis address                                                                        | `redis:6379`   |
-| `REDIS_PASSWORD` | Redis password                                                                       | ``             |
-| `AUTO_RENEW`     | Extend the session on every successful access                                        | true           |
-| `SESSION_TTL`    | The time after which an inactive client session will be invalidated.                 | `10m`          |
+| Variable         | Description                                                                                      | Default        |
+|------------------|--------------------------------------------------------------------------------------------------|----------------|
+| `LISTEN_ADDRESS` | IP:Port the proxy listens on. By default the proxy listens on all network interfaces             | `:8080`        |
+| `UPSTREAM_URL`   | URL of the upstream service                                                                      | None           |
+| `SECRET_PATH`    | Secret path prefix clients must visit to unlock access                                           | `/secret_path` |
+| `REDIS_ADDRESS`  | Redis address                                                                                    | `redis:6379`   |
+| `REDIS_PASSWORD` | Redis password                                                                                   | ``             |
+| `AUTO_RENEW`     | Extend the session on every successful access                                                    | true           |
+| `SESSION_TTL`    | The time after which an inactive client session will be invalidated                              | `10m`          |
+| `ALLOW_IPS`      | A comma separated list of IP regex patterns (Go's RE2 syntax) to allow without the secret prefix | ``             |
 
 ---
 
@@ -124,6 +129,7 @@ services:
         - SESSION_TTL=24h
         - REDIS_ADDRESS=redis:6379
         - AUTO_RENEW=true
+        - ALLOW_IPS=192.168.1.20
       depends_on:
         - it-tools
         - redis

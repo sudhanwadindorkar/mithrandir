@@ -1,0 +1,47 @@
+name: Retag and Publish Release Image
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+jobs:
+  retag-release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_TOKEN }}
+        
+    - name: Generate PR tag
+      id: pr_tag
+      run: |
+        # Sanitize branch name for Docker tag (same logic as PR build)
+        BRANCH_NAME="${{ github.head_ref }}"
+        SAFE_BRANCH=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g' | tr '[:upper:]' '[:lower:]')
+        PR_TAG="pr-${SAFE_BRANCH}-${{ github.event.pull_request.number }}"
+        echo "tag=$PR_TAG" >> $GITHUB_OUTPUT
+        echo "Source PR tag: $PR_TAG"
+        
+    - name: Pull and retag PR image
+      run: |
+        # Pull the existing PR image
+        docker pull sudhanwadindorkar/mithrandir:${{ steps.pr_tag.outputs.tag }}
+        
+        # Tag with commit SHA and main
+        docker tag sudhanwadindorkar/mithrandir:${{ steps.pr_tag.outputs.tag }} sudhanwadindorkar/mithrandir:${{ github.sha }}
+        docker tag sudhanwadindorkar/mithrandir:${{ steps.pr_tag.outputs.tag }} sudhanwadindorkar/mithrandir:main
+        
+        # Push the new tags
+        docker push sudhanwadindorkar/mithrandir:${{ github.sha }}
+        docker push sudhanwadindorkar/mithrandir:main
+        
+        echo "Successfully retagged PR image as:"
+        echo "  - sudhanwadindorkar/mithrandir:${{ github.sha }}"
+        echo "  - sudhanwadindorkar/mithrandir:main"

@@ -1,0 +1,73 @@
+name: Build PR Docker Image
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+jobs:
+  build-pr-image:
+    # Only run on PRs from the same repository (not forks) to protect secrets
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_TOKEN }}
+        
+    - name: Generate PR tag
+      id: pr_tag
+      run: |
+        # Sanitize branch name for Docker tag
+        BRANCH_NAME="${{ github.head_ref }}"
+        SAFE_BRANCH=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g' | tr '[:upper:]' '[:lower:]')
+        PR_TAG="pr-${SAFE_BRANCH}-${{ github.event.pull_request.number }}"
+        echo "tag=$PR_TAG" >> $GITHUB_OUTPUT
+        echo "Generated tag: $PR_TAG"
+        
+    - name: Build and push PR Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: sudhanwadindorkar/mithrandir:${{ steps.pr_tag.outputs.tag }}
+        labels: |
+          org.opencontainers.image.source=${{ github.event.repository.html_url }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.created=${{ github.event.pull_request.created_at }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: Comment on PR
+      uses: actions/github-script@v7
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `🐳 Docker image built and published: \`sudhanwadindorkar/mithrandir:${{ steps.pr_tag.outputs.tag }}\`
+            
+            You can test this image with:
+            \`\`\`bash
+            docker pull sudhanwadindorkar/mithrandir:${{ steps.pr_tag.outputs.tag }}
+            \`\`\`
+            `
+          });

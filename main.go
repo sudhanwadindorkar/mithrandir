@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/redis/go-redis/v9"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -31,9 +31,13 @@ var (
 	redisClient  *redis.Client
 	browserRegex = regexp.MustCompile(`(?i)Mozilla|Chrome|Safari|Edge|Opera|Firefox`)
 	apps         map[string]*AppConfig
+	logger       *slog.Logger
 )
 
 func main() {
+	// Setup logging
+	setupLogging()
+
 	// Load environment config
 	listenAddress := getenv("LISTEN_ADDRESS", ":8080")
 	redisAddress := getenv("REDIS_ADDRESS", "redis:6379")
@@ -52,19 +56,21 @@ func main() {
 
 	_, err := redisClient.Ping(ctx).Result()
 	if err != nil {
-		log.Fatalf("Failed to connect to Redis at %s: %v", redisAddress, err)
+		logger.Error("Failed to connect to Redis", "address", redisAddress, "error", err)
+		os.Exit(1)
 	}
 
-	log.Printf("Multi-app proxy started:")
-	log.Printf("  Listening on: %s", listenAddress)
-	log.Printf("  Redis Address: %s", redisAddress)
-	log.Printf("  Configured apps: %d", len(apps))
+	logger.Info("Multi-app proxy started", "listen_address", listenAddress, "redis_address", redisAddress, "app_count", len(apps))
 	for hostname, app := range apps {
-		log.Printf("    %s -> %s (secret: %s, ttl: %s)", hostname, app.UpstreamURL, app.SecretPathPrefix, app.SessionTTL)
+		logger.Info("App configured", "hostname", hostname, "upstream", app.UpstreamURL.String(), "secret_path", app.SecretPathPrefix, "session_ttl", app.SessionTTL.String())
 	}
 
 	handler := http.HandlerFunc(handleRequest)
-	log.Fatal(http.ListenAndServe(listenAddress, handler))
+	logger.Info("Starting HTTP server", "address", listenAddress)
+	if err := http.ListenAndServe(listenAddress, handler); err != nil {
+		logger.Error("HTTP server failed", "error", err)
+		os.Exit(1)
+	}
 }
 
 func clientIP(r *http.Request) string {
@@ -100,20 +106,23 @@ func loadAppConfigurations() {
 	loadAppsFromEnv()
 
 	if len(apps) == 0 {
-		log.Fatal("No app configurations found. Set APPS_CONFIG (JSON) or use numbered environment variables (APP_1_HOSTNAME, etc.)")
+		logger.Error("No app configurations found. Set APPS_CONFIG (JSON) or use numbered environment variables (APP_1_HOSTNAME, etc.)")
+		os.Exit(1)
 	}
 }
 
 func loadAppsFromJSON(jsonConfig string) {
 	var appConfigs []map[string]string
 	if err := json.Unmarshal([]byte(jsonConfig), &appConfigs); err != nil {
-		log.Fatalf("Failed to parse APPS_CONFIG JSON: %v", err)
+		logger.Error("Failed to parse APPS_CONFIG JSON", "error", err)
+		os.Exit(1)
 	}
 
 	for i, config := range appConfigs {
 		app, err := parseAppConfig(config)
 		if err != nil {
-			log.Fatalf("Invalid app config in JSON[%d]: %v", i, err)
+			logger.Error("Invalid app config in JSON", "index", i, "error", err)
+			os.Exit(1)
 		}
 		apps[app.Hostname] = app
 	}
@@ -138,7 +147,8 @@ func loadAppsFromEnv() {
 
 		app, err := parseAppConfig(config)
 		if err != nil {
-			log.Fatalf("Invalid app config %s: %v", prefix, err)
+			logger.Error("Invalid app config", "prefix", prefix, "error", err)
+			os.Exit(1)
 		}
 		apps[app.Hostname] = app
 	}
@@ -186,6 +196,33 @@ func parseAppConfig(config map[string]string) (*AppConfig, error) {
 	return app, nil
 }
 
+func setupLogging() {
+	logLevel := strings.ToUpper(getenv("LOG_LEVEL", "INFO"))
+
+	var level slog.Level
+	switch logLevel {
+	case "DEBUG":
+		level = slog.LevelDebug
+	case "INFO":
+		level = slog.LevelInfo
+	case "WARN":
+		level = slog.LevelWarn
+	case "ERROR":
+		level = slog.LevelError
+	default:
+		slog.Warn("Unrecognized LOG_LEVEL value provided:", logLevel, "- defaulting to INFO")
+		level = slog.LevelInfo
+	}
+
+	opts := &slog.HandlerOptions{
+		Level: level,
+	}
+
+	handler := slog.NewTextHandler(os.Stdout, opts)
+	logger = slog.New(handler)
+	slog.SetDefault(logger)
+}
+
 func handleRequest(responseWriter http.ResponseWriter, request *http.Request) {
 	hostname := request.Host
 	// Remove port from hostname if present
@@ -195,19 +232,19 @@ func handleRequest(responseWriter http.ResponseWriter, request *http.Request) {
 
 	app, exists := apps[hostname]
 	if !exists {
-		log.Printf("No app configured for hostname: %s", hostname)
+		logger.Info("No app configured for hostname", "hostname", hostname)
 		http.Error(responseWriter, "Not Found", http.StatusNotFound)
 		return
 	}
 
 	ip := clientIP(request)
-	log.Printf("[%s] Request from %s %s %s", hostname, ip, request.Method, request.URL.Path)
+	logger.Debug("Incoming request", "hostname", hostname, "ip", ip, "method", request.Method, "path", request.URL.Path)
 
 	// Check if IP matches any of the app's allowIPs patterns
 	isAllowedIP := false
 	for _, regex := range app.AllowIPs {
 		if regex.MatchString(ip) {
-			log.Printf("[%s] IP %s matches allow list. Forwarding directly to upstream.", hostname, ip)
+			logger.Debug("IP matches allow list, forwarding directly", "hostname", hostname, "ip", ip)
 			isAllowedIP = true
 			break
 		}
@@ -221,11 +258,11 @@ func handleRequest(responseWriter http.ResponseWriter, request *http.Request) {
 		if ipExistsInCache == 0 && strings.HasPrefix(request.URL.Path, app.SecretPathPrefix) {
 			err := redisClient.Set(ctx, cacheKey, "1", app.SessionTTL).Err()
 			if err != nil {
-				log.Printf("[%s] Redis error: %v", hostname, err)
+				logger.Error("Redis error while setting session", "hostname", hostname, "error", err)
 				http.Error(responseWriter, "Internal error", http.StatusInternalServerError)
 				return
 			}
-			log.Printf("[%s] Access granted to %s via secret path", hostname, ip)
+			logger.Info("Access granted via secret path", "hostname", hostname, "ip", ip)
 
 			// Check if the request comes from a browser
 			userAgent := request.Header.Get("User-Agent")
@@ -235,7 +272,7 @@ func handleRequest(responseWriter http.ResponseWriter, request *http.Request) {
 				if newPath == "" {
 					newPath = "/"
 				}
-				log.Printf("[%s] Detected User-Agent %s. Redirecting %s to %s", hostname, userAgent, ip, newPath)
+				logger.Debug("Browser detected, redirecting after secret path access", "hostname", hostname, "ip", ip, "user_agent", userAgent, "redirect_path", newPath)
 				http.Redirect(responseWriter, request, newPath, http.StatusFound)
 				return
 			}
@@ -243,7 +280,11 @@ func handleRequest(responseWriter http.ResponseWriter, request *http.Request) {
 
 		// If the IP is not in cache and not accessing the secret path, deny access
 		if ipExistsCheckError != nil || ipExistsInCache == 0 {
-			log.Printf("[%s] Access denied to %s", hostname, ip)
+			if ipExistsCheckError != nil {
+				logger.Error("Redis error while checking session", "hostname", hostname, "ip", ip, "error", ipExistsCheckError)
+			} else {
+				logger.Info("Access denied - no valid session", "hostname", hostname, "ip", ip, "path", request.URL.Path)
+			}
 			http.Error(responseWriter, "Access denied", http.StatusForbidden)
 			return
 		}
@@ -266,7 +307,7 @@ func handleRequest(responseWriter http.ResponseWriter, request *http.Request) {
 		}
 	}
 
-	log.Printf("[%s] Forwarding request from %s %s %s", hostname, ip, request.Method, request.URL.Path)
+	logger.Debug("Forwarding request to upstream", "hostname", hostname, "ip", ip, "method", request.Method, "path", request.URL.Path, "upstream", app.UpstreamURL.String())
 
 	// Create a reverse proxy for this specific app
 	proxy := httputil.NewSingleHostReverseProxy(app.UpstreamURL)

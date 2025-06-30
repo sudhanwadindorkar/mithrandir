@@ -182,6 +182,9 @@ APP_2_AUTO_RENEW=false
 
 ## 🐳 Docker Deployment
 
+The examples below show how to deploy `mithrandir` using Docker Compose, along with other applications in the same compose file.
+However, Mithrandir can be run as a standalone service also.
+
 ### Multi-App Docker Compose Example
 
 ```yaml
@@ -298,16 +301,6 @@ services:
       - it-tools
       - redis
     restart: always
-```
-
-### DNS Configuration
-
-Add these entries to your `/etc/hosts` file (or configure DNS):
-
-```
-127.0.0.1 immich.localhost
-127.0.0.1 nextcloud.localhost
-127.0.0.1 tools.localhost
 ```
 
 ### Build & Run

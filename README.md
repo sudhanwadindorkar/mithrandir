@@ -176,6 +176,7 @@ APP_2_AUTO_RENEW=false
 | `LISTEN_ADDRESS` | IP:Port the proxy listens on. By default the proxy listens on all network interfaces            | `:8080`        |
 | `REDIS_ADDRESS`  | Redis address                                                                                    | `redis:6379`   |
 | `REDIS_PASSWORD` | Redis password                                                                                   | ``             |
+| `LOG_LEVEL`      | Log level for the application (DEBUG, INFO, WARN, ERROR)                                        | `INFO`         |
 
 ---
 
@@ -217,6 +218,7 @@ services:
     environment:
       - REDIS_ADDRESS=redis:6379
       - LISTEN_ADDRESS=:8080
+      - LOG_LEVEL=INFO
       # JSON Configuration for multiple apps
       - |
         APPS_CONFIG=[
@@ -270,6 +272,7 @@ services:
       - "80:8080"
     environment:
       - REDIS_ADDRESS=redis:6379
+      - LOG_LEVEL=INFO
       # App 1
       - APP_1_HOSTNAME=immich.localhost
       - APP_1_UPSTREAM_URL=http://immich:3001
@@ -399,36 +402,37 @@ docker build -t mithrandir .
 
 ## 🧼 Logging
 
-The proxy logs all activities with app identification in brackets:
+The proxy uses structured logging with configurable log levels. Set the `LOG_LEVEL` environment variable to control log verbosity:
 
-- **Startup**: Lists all configured apps with their hostnames and upstream URLs
-- **Request Processing**: `[hostname] Request from IP METHOD PATH`
-- **Access Control**: 
-  - `[hostname] IP matches allow list. Forwarding directly to upstream.`
-  - `[hostname] Access granted to IP via secret path`
-  - `[hostname] Access denied to IP`
-- **Redirects**: `[hostname] Detected User-Agent. Redirecting IP to PATH`
-- **Forwarding**: `[hostname] Forwarding request from IP METHOD PATH`
-- **Errors**: 
-  - `No app configured for hostname: hostname`
-  - `[hostname] Redis error: error`
+- **ERROR**: Only errors (Redis failures, configuration errors)
+- **WARN**: Warnings and errors
+- **INFO**: General information, access denials, and startup info (default)
+- **DEBUG**: Detailed request tracing and forwarding information
+
+### Log Level Behaviors
+
+- **Successful requests**: Logged at `DEBUG` level only
+- **Access denials**: Logged at `INFO` level  
+- **Error conditions**: Logged at `ERROR` level
+- **Startup and configuration**: Logged at `INFO` level
+
+The structured logs include relevant context fields like hostname, IP, method, path, upstream URL, and error details.
 
 ### Example Log Output
 
+With structured logging, the output format has changed to include structured fields:
+
 ```
-2024/01/15 10:30:00 Multi-app proxy started:
-2024/01/15 10:30:00   Listening on: :8080
-2024/01/15 10:30:00   Redis Address: redis:6379
-2024/01/15 10:30:00   Configured apps: 3
-2024/01/15 10:30:00     immich.localhost -> http://immich:3001 (secret: /13b84d2a-faff-4b02-bef0-9f7898252659, ttl: 24h0m0s)
-2024/01/15 10:30:00     nextcloud.localhost -> http://nextcloud:80 (secret: /a1b2c3d4-e5f6-7890-abcd-ef1234567890, ttl: 12h0m0s)
-2024/01/15 10:30:00     tools.localhost -> http://it-tools:80 (secret: /dev-tools-secret-xyz, ttl: 1h0m0s)
-2024/01/15 10:30:15 [immich.localhost] Request from 192.168.1.100 GET /13b84d2a-faff-4b02-bef0-9f7898252659
-2024/01/15 10:30:15 [immich.localhost] Access granted to 192.168.1.100 via secret path
-2024/01/15 10:30:15 [immich.localhost] Detected User-Agent Mozilla/5.0. Redirecting 192.168.1.100 to /
-2024/01/15 10:30:16 [immich.localhost] Request from 192.168.1.100 GET /
-2024/01/15 10:30:16 [immich.localhost] Forwarding request from 192.168.1.100 GET /
-2024/01/15 10:30:20 No app configured for hostname: unknown.localhost
+time=2024-01-15T10:30:00.000Z level=INFO msg="Multi-app proxy started" listen_address=:8080 redis_address=redis:6379 app_count=3
+time=2024-01-15T10:30:00.001Z level=INFO msg="App configured" hostname=immich.localhost upstream=http://immich:3001 secret_path=/13b84d2a-faff-4b02-bef0-9f7898252659 session_ttl=24h0m0s
+time=2024-01-15T10:30:00.002Z level=INFO msg="App configured" hostname=nextcloud.localhost upstream=http://nextcloud:80 secret_path=/a1b2c3d4-e5f6-7890-abcd-ef1234567890 session_ttl=12h0m0s
+time=2024-01-15T10:30:00.003Z level=INFO msg="App configured" hostname=tools.localhost upstream=http://it-tools:80 secret_path=/dev-tools-secret-xyz session_ttl=1h0m0s
+time=2024-01-15T10:30:15.123Z level=DEBUG msg="Incoming request" hostname=immich.localhost ip=192.168.1.100 method=GET path=/13b84d2a-faff-4b02-bef0-9f7898252659
+time=2024-01-15T10:30:15.124Z level=INFO msg="Access granted via secret path" hostname=immich.localhost ip=192.168.1.100
+time=2024-01-15T10:30:15.125Z level=DEBUG msg="Browser detected, redirecting after secret path access" hostname=immich.localhost ip=192.168.1.100 user_agent="Mozilla/5.0" redirect_path=/
+time=2024-01-15T10:30:16.200Z level=DEBUG msg="Incoming request" hostname=immich.localhost ip=192.168.1.100 method=GET path=/
+time=2024-01-15T10:30:16.201Z level=DEBUG msg="Forwarding request to upstream" hostname=immich.localhost ip=192.168.1.100 method=GET path=/ upstream=http://immich:3001
+time=2024-01-15T10:30:20.500Z level=INFO msg="No app configured for hostname" hostname=unknown.localhost
 ```
 
 ---

@@ -34,14 +34,43 @@ jobs:
         # Pull the existing PR image
         docker pull sudhanwadindorkar/mithrandir:${{ steps.pr_tag.outputs.tag }}
         
-        # Tag with commit SHA and main
+        # Tag with commit SHA and latest
         docker tag sudhanwadindorkar/mithrandir:${{ steps.pr_tag.outputs.tag }} sudhanwadindorkar/mithrandir:${{ github.sha }}
-        docker tag sudhanwadindorkar/mithrandir:${{ steps.pr_tag.outputs.tag }} sudhanwadindorkar/mithrandir:main
+        docker tag sudhanwadindorkar/mithrandir:${{ steps.pr_tag.outputs.tag }} sudhanwadindorkar/mithrandir:latest
         
         # Push the new tags
         docker push sudhanwadindorkar/mithrandir:${{ github.sha }}
-        docker push sudhanwadindorkar/mithrandir:main
+        docker push sudhanwadindorkar/mithrandir:latest
         
         echo "Successfully retagged PR image as:"
         echo "  - sudhanwadindorkar/mithrandir:${{ github.sha }}"
-        echo "  - sudhanwadindorkar/mithrandir:main"
+        echo "  - sudhanwadindorkar/mithrandir:latest"
+        
+    - name: Delete old PR tag from Docker Hub
+      run: |
+        # Get Docker Hub token for API access
+        echo "Getting Docker Hub API token..."
+        TOKEN=$(curl -s -X POST \
+          -H "Content-Type: application/json" \
+          -d "{\"username\": \"${{ secrets.DOCKER_USERNAME }}\", \"password\": \"${{ secrets.DOCKER_TOKEN }}\"}" \
+          https://hub.docker.com/v2/users/login/ | jq -r .token)
+        
+        if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
+          echo "Failed to get Docker Hub API token"
+          exit 1
+        fi
+        
+        # Delete the PR tag from Docker Hub
+        echo "Deleting PR tag: ${{ steps.pr_tag.outputs.tag }}"
+        RESPONSE=$(curl -s -w "%{http_code}" -X DELETE \
+          -H "Authorization: JWT $TOKEN" \
+          "https://hub.docker.com/v2/repositories/sudhanwadindorkar/mithrandir/tags/${{ steps.pr_tag.outputs.tag }}/")
+        
+        HTTP_CODE="${RESPONSE: -3}"
+        if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "404" ]; then
+          echo "Successfully deleted PR tag: ${{ steps.pr_tag.outputs.tag }}"
+        else
+          echo "Failed to delete PR tag. HTTP code: $HTTP_CODE"
+          echo "Response: ${RESPONSE%???}"
+          # Don't fail the workflow for cleanup issues
+        fi

@@ -210,6 +210,7 @@ func setupLogging() {
 	case "ERROR":
 		level = slog.LevelError
 	default:
+		slog.Warn("Unrecognized LOG_LEVEL value provided:", logLevel, "- defaulting to INFO")
 		level = slog.LevelInfo
 	}
 
